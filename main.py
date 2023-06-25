@@ -6,35 +6,72 @@ from selenium.webdriver.common.keys import Keys
 import re
 import datetime
 
+
+# from selenium.webdriver.support.ui import WebDriverWait
+# from selenium.webdriver.support import expected_conditions as EC
+
+# Trying out Class for OOP
+
+class Datacenter:
+    def login_to_datacenter(self, user, user_elem, passwd, passwd_elem, twofactor, link, path=None, login_click=False):
+        while True:
+            if path is not None:
+                driver.get(link + path)
+            else:
+                driver.get(link)
+            user_field = driver.find_element(By.NAME, user_elem)
+            password_field = driver.find_element(By.NAME, passwd_elem)
+            user_field.send_keys(user)
+            password_field.send_keys(passwd)
+            # After automatically entering the login details, wait for the 2FA, if 2fa is enabled
+            if login_click:
+                driver.find_element(By.CLASS_NAME, 'login-button').click()
+            if twofactor:
+                login = input("Please login to " + link + " and press enter or 'restart'")
+                if login == "restart":
+                    continue  # starts the while loop again if restart is specified
+                else:
+                    break  # continues to script if restart is not specified
+            else:  # if 2FA is not enabled or false, login to quadranet automatically with the login details
+                time.sleep(1)
+                driver.find_element(By.CLASS_NAME, 'btn-primary').click()
+
+
 # needed information about quadranet
-quadranet_username: str = 'your_username'      # Enter your quadranet username here
-quadranet_password = 'your_password'      # Enter your quadranet password here
-quadranet_2FA = True                        # True or False
-quadranet_url = 'https://neo.quadranet.com'     # Example 'neo.quadranet.com'
+quadranet = Datacenter()
+
+quadranet.username = 'your_username'  # Enter your quadranet username here
+quadranet.username_element = 'username'  # HTML Name
+quadranet.password = 'your_password'  # Enter your quadranet password here
+quadranet.password_element = 'password'  # HTML Name
+quadranet.twoFactor = True  # True or False
+quadranet.url = 'https://neo.quadranet.com'  # Example 'neo.quadranet.com'
+quadranet.login_path = "/login"
+
+# needed information about quadranet
+webNX = Datacenter()
+
+webNX.username = 'your_username'  # Enter your Datacenter username here
+webNX.username_element = 'login'  # HTML Name
+webNX.password = 'your_password'  # Enter your Datacenter password here
+webNX.password_element = 'pass'  # HTML Name
+webNX.twoFactor = True  # True or False
+webNX.url = 'https://clients.webnx.com'  # Example 'neo.quadranet.com'
+webNX.login_path = None
+webNX.click_login = True
 
 # needed information about WHMCS
-whmcs_username: str = 'your_username'        # Enter your WHMCS username here
-whmcs_password = 'your_password'             # Enter your WHMCS password here
-whmcs_2FA = True                            # True or False
-whmcs_url = 'your_WHMCS_URL'     # Example 'https://whmcs.domain.com/path_to_whmcs'
+whmcs_username: str = 'your_username'  # Enter your WHMCS username here
+whmcs_password = 'your_password'  # Enter your WHMCS password here
+whmcs_2FA = True  # True or False
+whmcs_url = 'your_WHMCS_URL'  # Example 'https://whmcs.domain.com/path_to_whmcs'
 
 driver = webdriver.Chrome()
-while True:
-    driver.get(quadranet_url + "/login")
-    username = driver.find_element(By.NAME, 'username')
-    password = driver.find_element(By.NAME, 'password')
-    username.send_keys(quadranet_username)
-    password.send_keys(quadranet_password)
-    # After automatically entering the login details, wait for the 2FA, if 2fa is enabled
-    if quadranet_2FA:
-        login = input("Please login to Quadranet and press enter or 'restart'")
-        if login == "restart":
-            continue  # starts the while loop again if restart is specified
-        else:
-            break  # continues to to script if restart is not specified
-    else:   # if 2FA is not enabled or false, login to quadranet automatically with the login details
-        time.sleep(1)
-        driver.find_element(By.CLASS_NAME, 'btn-primary').click()
+quadranet.login_to_datacenter(quadranet.username, quadranet.username_element, quadranet.password,
+                              quadranet.password_element, quadranet.twoFactor, quadranet.url,
+                              quadranet.login_path)
+webNX.login_to_datacenter(webNX.username, webNX.username_element, webNX.password, webNX.password_element,
+                          webNX.twoFactor, webNX.url, webNX.login_path, webNX.click_login)
 # Login to WHMCS
 driver.get(whmcs_url + "/login.php")
 username = driver.find_element(By.NAME, 'username')
@@ -52,7 +89,7 @@ if whmcs_2FA:
 # loop through the tickets
 while True:
     # Get the list of support tickets
-    driver.get(quadranet_url + "/support")
+    driver.get(quadranet.url + "/support")
     time.sleep(3)
     # Get the status of the first ticket in list
     ticketstatus = driver.find_element(By.CLASS_NAME, 'ticket-status')
@@ -61,7 +98,7 @@ while True:
     # Get the ticket ID to variable to work with. We are getting only the first text element
     ticket_id = ticketid.text.split()[0]
     # Set the URL to open the ticket
-    url = f"{quadranet_url}/support/ticket/{ticket_id}"
+    url = f"{quadranet.url}/support/ticket/{ticket_id}"
     desiredStatus = "On Hold"
     if ticketstatus.text == "On Hold":
         # if the above condition is true, open the ticket
@@ -71,7 +108,7 @@ while True:
         # Prints the value we got from the header
         # print(headertext.text)
         # extract IP address from header if present
-        #ip_address = re.findall('\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}', headertext.text)[0]
+        # ip_address = re.findall('\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}', headertext.text)[0]
         ip_address_list = re.findall('\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}', headertext.text)
         if len(ip_address_list) > 0:
             ip_address = ip_address_list[0]
@@ -79,6 +116,12 @@ while True:
             # handle the error, for example set ip_address to None or raise an exception
             ip_address = input("Enter the IP address that you see on the report")
         print("The abusive user IP is: " + ip_address)
+        # Get the date of when the ticket opened
+        quadranet_ticket_header = driver.find_element(By.CLASS_NAME, 'body-header').text
+        match = re.search(r'\d{2}/\d{2}/\d{4}', quadranet_ticket_header)  # we will get output as 12/19/2022
+        raw_date = match.group(0)
+        datetime_obj = datetime.datetime.strptime(raw_date, '%m/%d/%Y')
+        quadranet_ticket_time = datetime_obj.strftime('%d/%m/%Y')  # we will get output as 19/12/2022
         # Now, search for this IP in WHMCS
         driver.get(whmcs_url + "/index.php")
         searchClick = driver.find_element(By.NAME, 'searchterm')
@@ -120,17 +163,18 @@ while True:
                 break
         href_value = second_a_element.get_attribute('href')
         # Prints the WHMCS link that we will go to
-        #print(href_value)
-        print("Proceeding to service of " + ip_address)
+        # print(href_value)
+        # print("Proceeding to service of " + ip_address)
         # Now go to the client service
         driver.get(href_value)
         # Get the user ID
         match = re.search(r"userid=(\d+)", href_value)
         if match:
             userid = match.group(1)
-            print("User ID:", userid)
+            # print("User ID:", userid)
         else:
             print("User ID not found in URL")
+        time.sleep(3)
         # Find the select element by its name attribute
         select_element = driver.find_element(By.NAME, 'domainstatus')
 
@@ -147,8 +191,41 @@ while True:
         hostname = driver.find_element(By.NAME, 'domain').get_attribute("value")
         # Get Registration date for the product
         registration_date = driver.find_element(By.NAME, 'regdate').get_attribute("value")
+        registration_date_obj = datetime.datetime.strptime(registration_date, '%d/%m/%Y').date()
         # print(hostname)
-        print("The user is currently " + selected_status + " Service registered on " + registration_date)  # This will print the selected status, in this case "Suspended"
+        print(
+            "The user is currently " + selected_status + " Service registered on " + registration_date + " and the quadranet ticket opened on " + quadranet_ticket_time)  # This will print the selected status, in this case "Suspended"
+        # calculate the difference between the dates
+        date_diff = datetime_obj.date() - registration_date_obj
+        # get the absolute difference between the dates
+        days_diff = abs(date_diff.days)
+        # check if the difference is positive or negative
+        if date_diff.days > 0:
+            print(f"The quadranet ticket was created {days_diff} days after the registration date.")
+        elif date_diff.days < 0:
+            print(f"The quadranet ticket was created {days_diff} days before the registration date.")
+            # This will be executed if I see that the report is old and abusive user is terminated already
+            # notify quadranet about it
+            driver.get(url)
+            time.sleep(3)
+            # click on the reply button
+            reply = driver.find_element(By.ID, 'follow_up')
+            reply.click()
+            time.sleep(1)
+            reply = driver.find_element(By.ID, 'reply_body')
+            reply.send_keys("Hello!" +
+                            Keys.RETURN +
+                            "Thank you for the notification. I can see that this was a old ticket and the user had been terminated at the time of the incident. There is nothing much to do about it anymore. We are always willing to co-operate on any abuse reports." +
+                            Keys.RETURN +
+                            "Regards")
+            time.sleep(1)
+            service_list = driver.find_element(By.CLASS_NAME, 'modal-footer')
+            submit_button = service_list.find_element(By.CLASS_NAME, 'btn-primary')
+            submit_button.click()
+            print("Replied to Quadranet that the ticket is old. On " + url)
+            continue
+        else:
+            print("The quadranet ticket was created on the same day as the registration date.")
 
         if selected_status == "Suspended":
             # send the ticket reply as the user is suspended
@@ -162,7 +239,7 @@ while True:
             reply = driver.find_element(By.ID, 'reply_body')
             reply.send_keys("Hello!" +
                             Keys.RETURN +
-                            "Thank you for the notification. The user has been suspended for the activities mentioned."+
+                            "Thank you for the notification. The user has been suspended for the activities mentioned." +
                             Keys.RETURN +
                             "Regards")
             time.sleep(1)
@@ -176,11 +253,12 @@ while True:
             print("Initializing Active User Procedure on Abuse Ticket..." + url)
             time.sleep(3)
             ticketsList = driver.find_element(By.ID, 'clientTab-11')
-            #print(ticketsList.get_attribute('href'))
+            # print(ticketsList.get_attribute('href'))
             # Go to the ticket URL
             driver.get(ticketsList.get_attribute('href'))
-            #should we open the ticket?
-            user_input = input("Press Enter to continue to next ticket, or any other key to exit, t to see ticket content, n to let them know user notified already, or 'suspend', 'old'")
+            # should we open the ticket?
+            user_input = input(
+                "Press Enter to continue to next ticket, or any other key to exit, t to see ticket content, n to let them know user notified already, or 'suspend', 'old'")
             if user_input == "t":
                 driver.get(url)
                 print("#####################################")
@@ -190,10 +268,30 @@ while True:
                 print("Service Hostname: " + hostname)
                 print("#####################################")
                 print("You will need to copy in the following order 1. IP Address, 2. Reference 3. Abuse Report")
-                user_input = input("press enter again once you have copied the report, q, restart")
+                user_input = input("press enter again once you have copied the report, q, restart, 'old")
                 if user_input == "q":
                     break
                 elif user_input == "restart":
+                    continue
+                elif user_input == "old":
+                    # This will be executed if I see that the report is old and abusive user is terminated already
+                    # notify quadranet about it
+                    driver.get(url)
+                    time.sleep(3)
+                    # click on the reply button
+                    reply = driver.find_element(By.ID, 'follow_up')
+                    reply.click()
+                    time.sleep(1)
+                    reply = driver.find_element(By.ID, 'reply_body')
+                    reply.send_keys("Hello!" +
+                                    Keys.RETURN +
+                                    "Thank you for the notification. I can see that this was a old ticket and the user had been terminated at the time of the incedent. There is nothing much to do about it anymore. We are always willing to co-operate on any abuse reports." +
+                                    Keys.RETURN +
+                                    "Regards")
+                    service_list = driver.find_element(By.CLASS_NAME, 'modal-footer')
+                    submit_button = service_list.find_element(By.CLASS_NAME, 'btn-primary')
+                    submit_button.click()
+                    print("Replied to Quadranet that the ticket is old. On " + url)
                     continue
                 # Creating the customer abuse ticket from WHMCS
                 print("getting back to the original abuse report to let them know that user is notified")
@@ -274,7 +372,8 @@ while True:
                 service_list = driver.find_element(By.CLASS_NAME, 'modal-footer')
                 submit_button = service_list.find_element(By.CLASS_NAME, 'btn-primary')
                 submit_button.click()
-                print("Replied to Quadranet that the user has been notified. On " + url)
+                print("Replied to Quadranet that the user has been suspended. On " + url)
+                continue
             elif user_input == "old":
                 # This will be executed if I see that the report is old and abusive user is terminated already
                 # notify quadranet about it
@@ -294,12 +393,14 @@ while True:
                 submit_button = service_list.find_element(By.CLASS_NAME, 'btn-primary')
                 submit_button.click()
                 print("Replied to Quadranet that the ticket is old. On " + url)
+                continue
             elif user_input != "":
                 break
     else:
         print("No On Hold tickets found")
-        print("waiting for 30 minutes on " + str(datetime.datetime.now().strftime("%I:%M %p")) + " to " + str((datetime.datetime.now() + datetime.timedelta(minutes=30)).strftime("%I:%M %p")))
-        time.sleep(30*60)
+        print("waiting for 30 minutes on " + str(datetime.datetime.now().strftime("%I:%M %p")) + " to " + str(
+            (datetime.datetime.now() + datetime.timedelta(minutes=30)).strftime("%I:%M %p")))
+        time.sleep(30 * 60)
         print("starting over!")
         continue
     user_input = input("Press Enter to continue to next ticket, or any other key to exit: ")
