@@ -1,5 +1,7 @@
 from selenium import webdriver
 import time
+
+from selenium.common import NoSuchElementException
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import Select
 from selenium.webdriver.common.keys import Keys
@@ -39,7 +41,6 @@ class Datacenter:
 
 # needed information about quadranet
 quadranet = Datacenter()
-
 quadranet.username = 'your_username'  # Enter your quadranet username here
 quadranet.username_element = 'username'  # HTML Name
 quadranet.password = 'your_password'  # Enter your quadranet password here
@@ -48,9 +49,8 @@ quadranet.twoFactor = True  # True or False
 quadranet.url = 'https://neo.quadranet.com'  # Example 'neo.quadranet.com'
 quadranet.login_path = "/login"
 
-# needed information about quadranet
+# needed information about datacenter
 webNX = Datacenter()
-
 webNX.username = 'your_username'  # Enter your Datacenter username here
 webNX.username_element = 'login'  # HTML Name
 webNX.password = 'your_password'  # Enter your Datacenter password here
@@ -65,6 +65,8 @@ whmcs_username: str = 'your_username'  # Enter your WHMCS username here
 whmcs_password = 'your_password'  # Enter your WHMCS password here
 whmcs_2FA = True  # True or False
 whmcs_url = 'your_WHMCS_URL'  # Example 'https://whmcs.domain.com/path_to_whmcs'
+
+processed_ips = {}
 
 driver = webdriver.Chrome()
 quadranet.login_to_datacenter(quadranet.username, quadranet.username_element, quadranet.password,
@@ -92,7 +94,16 @@ while True:
     driver.get(quadranet.url + "/support")
     time.sleep(3)
     # Get the status of the first ticket in list
-    ticketstatus = driver.find_element(By.CLASS_NAME, 'ticket-status')
+    try:
+        ticketstatus = driver.find_element(By.CLASS_NAME, 'ticket-status')
+    except NoSuchElementException:
+        # handle the case when there are no li_elements or there is no second li element
+        print("Something went wrong on quadranet")
+        print("waiting for 10 minutes on " + str(datetime.datetime.now().strftime("%I:%M %p")) + " to " + str(
+            (datetime.datetime.now() + datetime.timedelta(minutes=10)).strftime("%I:%M %p")))
+        time.sleep(10 * 60)
+        print("starting over!")
+        continue
     # get the ticket ID of the first ticket in list
     ticketid = driver.find_element(By.CLASS_NAME, 'sorting_1')
     # Get the ticket ID to variable to work with. We are getting only the first text element
@@ -104,7 +115,14 @@ while True:
         # if the above condition is true, open the ticket
         driver.get(url)
         # get the text of header to get IP address from class no-margin (there is two class, I need the first class)
-        headertext = driver.find_element(By.CLASS_NAME, 'no-margin')
+        try:
+            headertext = driver.find_element(By.CLASS_NAME, 'no-margin')
+        except NoSuchElementException:
+            # Handle the NoSuchElementException when the element is not found
+            print("Error: Element with class 'no-margin' not found. Skipping this ticket.")
+            # Move to the next ticket (iteration of the while loop)
+            continue
+
         # Prints the value we got from the header
         # print(headertext.text)
         # extract IP address from header if present
@@ -117,50 +135,125 @@ while True:
             ip_address = input("Enter the IP address that you see on the report")
         print("The abusive user IP is: " + ip_address)
         # Get the date of when the ticket opened
-        quadranet_ticket_header = driver.find_element(By.CLASS_NAME, 'body-header').text
+        try:
+            quadranet_ticket_header = driver.find_element(By.CLASS_NAME, 'body-header').text
+        except NoSuchElementException:
+            # handle the case when there are no li_elements or there is no second li element
+            print("Something went wrong on quadranet")
+            print("waiting for 15 minutes on " + str(datetime.datetime.now().strftime("%I:%M %p")) + " to " + str(
+                (datetime.datetime.now() + datetime.timedelta(minutes=30)).strftime("%I:%M %p")))
+            time.sleep(15 * 60)
+            print("starting over!")
+            continue
         match = re.search(r'\d{2}/\d{2}/\d{4}', quadranet_ticket_header)  # we will get output as 12/19/2022
         raw_date = match.group(0)
         datetime_obj = datetime.datetime.strptime(raw_date, '%m/%d/%Y')
         quadranet_ticket_time = datetime_obj.strftime('%d/%m/%Y')  # we will get output as 19/12/2022
         # Now, search for this IP in WHMCS
         driver.get(whmcs_url + "/index.php")
-        searchClick = driver.find_element(By.NAME, 'searchterm')
+        try:
+            searchClick = driver.find_element(By.NAME, 'searchterm')
+        except NoSuchElementException:
+            # handle the case when there are no li_elements or there is no second li element
+            print("Something went wrong on whmcs")
+            print("waiting for 15 minutes on " + str(datetime.datetime.now().strftime("%I:%M %p")) + " to " + str(
+                (datetime.datetime.now() + datetime.timedelta(minutes=30)).strftime("%I:%M %p")))
+            time.sleep(15 * 60)
+            print("starting over!")
+            continue
         searchClick.send_keys(ip_address)
         time.sleep(3)
         service_list = driver.find_element(By.CSS_SELECTOR, 'ul[data-type="service"]')
         # display what we are getting from the search result
         # print(service_list.text)
-        # Find the ancor text for the service
+        # Find the anchor text for the service
         li_elements = service_list.find_elements(By.TAG_NAME, 'li')
         try:
             second_a_element = li_elements[1].find_element(By.CSS_SELECTOR, 'a')
         except IndexError:
             # handle the case when there are no li_elements or there is no second li element
-            isterminated = input("can not find the user, is he terminated already? yes/no")
-            if isterminated == "yes":
-                # notify quadranet that user is already terminated
-                print("Already terminated")
-                # notify quadranet about it
-                driver.get(url)
-                time.sleep(3)
-                # click on the reply button
-                reply = driver.find_element(By.ID, 'follow_up')
-                reply.click()
-                time.sleep(1)
-                reply = driver.find_element(By.ID, 'reply_body')
-                reply.send_keys("Hello!" +
-                                Keys.RETURN +
-                                "Thank you for the notification. The user has been already terminated for the report. As you know, we are always willing to co-operate on any abuse reports." +
-                                Keys.RETURN +
-                                "Regards")
-                service_list = driver.find_element(By.CLASS_NAME, 'modal-footer')
-                submit_button = service_list.find_element(By.CLASS_NAME, 'btn-primary')
-                submit_button.click()
-                print("Replied to Quadranet that the user has been notified. On " + url)
-                continue
+            if ip_address in processed_ips:
+                # If the IP is already processed, get the termination status from the dictionary
+                is_terminated = processed_ips[ip_address]
+                if is_terminated == "yes":
+                    print("Already terminated")
+                    # notify quadranet about it
+                    driver.get(url)
+                    time.sleep(3)
+                    # click on the reply button
+                    reply = driver.find_element(By.ID, 'follow_up')
+                    reply.click()
+                    time.sleep(1)
+                    reply = driver.find_element(By.ID, 'reply_body')
+                    reply.send_keys("Hello!" +
+                                    Keys.RETURN +
+                                    "Thank you for the notification. The user has been already terminated for the report. As you know, we are always willing to co-operate on any abuse reports." +
+                                    Keys.RETURN +
+                                    "Regards")
+                    service_list = driver.find_element(By.CLASS_NAME, 'modal-footer')
+                    submit_button = service_list.find_element(By.CLASS_NAME, 'btn-primary')
+                    submit_button.click()
+                    print("Replied to Quadranet that the user has been notified. On " + url)
+                    continue
             else:
-                print("Okay, take your time, pausing for now")
-                break
+                isterminated = input("can not find the user, is he terminated already? yes/no/suspended")
+                if isterminated == "yes":
+                    processed_ips[ip_address] = "yes"
+                    # notify quadranet that user is already terminated
+                    print("Already terminated")
+                    # notify quadranet about it
+                    driver.get(url)
+                    time.sleep(3)
+                    # click on the reply button
+                    try:
+                        reply = driver.find_element(By.ID, 'follow_up')
+                    except NoSuchElementException:
+                        # handle the case when there are no li_elements or there is no second li element
+                        print("Something went wrong on quadranet")
+                        print("waiting for 5 minutes on " + str(
+                            datetime.datetime.now().strftime("%I:%M %p")) + " to " + str(
+                            (datetime.datetime.now() + datetime.timedelta(minutes=5)).strftime("%I:%M %p")))
+                        time.sleep(5 * 60)
+                        print("starting over!")
+                        continue
+                    reply.click()
+                    time.sleep(1)
+                    reply = driver.find_element(By.ID, 'reply_body')
+                    reply.send_keys("Hello!" +
+                                    Keys.RETURN +
+                                    "Thank you for the notification. The user has been already terminated for the report. As you know, we are always willing to co-operate on any abuse reports." +
+                                    Keys.RETURN +
+                                    "Regards")
+                    service_list = driver.find_element(By.CLASS_NAME, 'modal-footer')
+                    submit_button = service_list.find_element(By.CLASS_NAME, 'btn-primary')
+                    submit_button.click()
+                    print("Replied to Quadranet that the user has been terminated. On " + url)
+                    continue
+                elif isterminated == "suspended":
+                    # send the ticket reply as the user is suspended
+                    # go to the ticket again
+                    driver.get(url)
+                    time.sleep(3)
+                    # click on the reply button
+                    reply = driver.find_element(By.ID, 'follow_up')
+                    reply.click()
+                    time.sleep(1)
+                    reply = driver.find_element(By.ID, 'reply_body')
+                    reply.send_keys("Hello!" +
+                                    Keys.RETURN +
+                                    "Thank you for the notification. The user has been suspended for the activities mentioned." +
+                                    Keys.RETURN +
+                                    "Regards")
+                    time.sleep(1)
+                    service_list = driver.find_element(By.CLASS_NAME, 'modal-footer')
+                    submit_button = service_list.find_element(By.CLASS_NAME, 'btn-primary')
+                    submit_button.click()
+                    print("Replied to Quadranet that the user is already suspended On " + url)
+                    # Continue to next ticket (iteration of the while loop)
+                    continue
+                else:
+                    print("Okay, take your time, pausing for now")
+                    break
         href_value = second_a_element.get_attribute('href')
         # Prints the WHMCS link that we will go to
         # print(href_value)
@@ -176,8 +269,15 @@ while True:
             print("User ID not found in URL")
         time.sleep(3)
         # Find the select element by its name attribute
-        select_element = driver.find_element(By.NAME, 'domainstatus')
-
+        try:
+            select_element = driver.find_element(By.NAME, 'domainstatus')
+        except NoSuchElementException:
+            print("Something went wrong on whmcs")
+            print("waiting for 15 minutes on " + str(datetime.datetime.now().strftime("%I:%M %p")) + " to " + str(
+                (datetime.datetime.now() + datetime.timedelta(minutes=15)).strftime("%I:%M %p")))
+            time.sleep(15 * 60)
+            print("starting over!")
+            continue
         # Create a Select object to interact with the select element
         select = Select(select_element)
 
@@ -194,7 +294,7 @@ while True:
         registration_date_obj = datetime.datetime.strptime(registration_date, '%d/%m/%Y').date()
         # print(hostname)
         print(
-            "The user is currently " + selected_status + " Service registered on " + registration_date + " and the quadranet ticket opened on " + quadranet_ticket_time)  # This will print the selected status, in this case "Suspended"
+            "The user is currently " + selected_status + ". Service registered on " + registration_date + " and the quadranet ticket opened on " + quadranet_ticket_time)  # This will print the selected status, in this case "Suspended"
         # calculate the difference between the dates
         date_diff = datetime_obj.date() - registration_date_obj
         # get the absolute difference between the dates
@@ -398,9 +498,9 @@ while True:
                 break
     else:
         print("No On Hold tickets found")
-        print("waiting for 30 minutes on " + str(datetime.datetime.now().strftime("%I:%M %p")) + " to " + str(
-            (datetime.datetime.now() + datetime.timedelta(minutes=30)).strftime("%I:%M %p")))
-        time.sleep(30 * 60)
+        print("waiting for 15 minutes on " + str(datetime.datetime.now().strftime("%I:%M %p")) + " to " + str(
+            (datetime.datetime.now() + datetime.timedelta(minutes=15)).strftime("%I:%M %p")))
+        time.sleep(15 * 60)
         print("starting over!")
         continue
     user_input = input("Press Enter to continue to next ticket, or any other key to exit: ")
