@@ -1,8 +1,10 @@
 from selenium import webdriver
 import time
-
+from bs4 import BeautifulSoup
 from selenium.common import NoSuchElementException
 from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import Select
 from selenium.webdriver.common.keys import Keys
 import re
@@ -68,7 +70,49 @@ whmcs_url = 'your_WHMCS_URL'  # Example 'https://whmcs.domain.com/path_to_whmcs'
 
 processed_ips = {}
 
+
 driver = webdriver.Chrome()
+
+
+def send_suspended_reply(driver, url):
+    # Go to the ticket again
+    driver.get(url)
+    time.sleep(3)
+
+    try:
+        # Click on the reply button
+        reply = WebDriverWait(driver, 10).until(
+            EC.element_to_be_clickable((By.ID, 'follow_up'))
+        )
+        reply.click()
+
+        # Write the reply message
+        reply_box = WebDriverWait(driver, 10).until(
+            EC.element_to_be_clickable((By.ID, 'reply_body'))
+        )
+        reply_box.send_keys("Hello!" +
+                            Keys.RETURN +
+                            "Thank you for the notification. The user has been suspended for the activities mentioned." +
+                            Keys.RETURN +
+                            "Regards")
+
+        # Submit the reply
+        submit_button = WebDriverWait(driver, 10).until(
+            EC.element_to_be_clickable((By.XPATH, '//div[@class="modal-footer"]/button[@class="btn-primary"]'))
+        )
+        submit_button.click()
+
+        print("Replied to Quadranet that the user is already suspended on " + url)
+
+    except Exception as e:
+        print("Error occurred while sending the reply:", str(e))
+
+# Example usage:
+# Assuming you have a webdriver instance named 'driver' already set up
+# and 'url' contains the URL of the ticket
+# send_ticket_reply(driver, url)
+
+
 quadranet.login_to_datacenter(quadranet.username, quadranet.username_element, quadranet.password,
                               quadranet.password_element, quadranet.twoFactor, quadranet.url,
                               quadranet.login_path)
@@ -98,7 +142,7 @@ while True:
         ticketstatus = driver.find_element(By.CLASS_NAME, 'ticket-status')
     except NoSuchElementException:
         # handle the case when there are no li_elements or there is no second li element
-        print("Something went wrong on quadranet")
+        print("Could not find any tickets on Quadranet")
         print("waiting for 10 minutes on " + str(datetime.datetime.now().strftime("%I:%M %p")) + " to " + str(
             (datetime.datetime.now() + datetime.timedelta(minutes=10)).strftime("%I:%M %p")))
         time.sleep(10 * 60)
@@ -130,19 +174,40 @@ while True:
         ip_address_list = re.findall('\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}', headertext.text)
         if len(ip_address_list) > 0:
             ip_address = ip_address_list[0]
+            # Reply right after detecting the ip if it is already in the suspended list
+            if ip_address in processed_ips:
+                # If the IP is already processed, get the termination status from the dictionary
+                is_processed = processed_ips[ip_address]
+                if is_processed == "suspended":
+                    send_suspended_reply(driver, url)
+                    continue
         else:
+            # try to find IP address from the ticket:
+            html_content = driver.page_source
+
+            # Step 3: Parse the HTML content using BeautifulSoup
+            soup = BeautifulSoup(html_content, 'html.parser')
+
+            # Step 4: Find the first line containing the desired text
+            desired_text = "There has been a report of abuse on your server"
+            lines = soup.find_all(text=True)
+            for line in lines:
+                if desired_text in line:
+                    print(line.strip())
+
             # handle the error, for example set ip_address to None or raise an exception
             ip_address = input("Enter the IP address that you see on the report")
         print("The abusive user IP is: " + ip_address)
         # Get the date of when the ticket opened
         try:
+            # Get the date of when the ticket opened
             quadranet_ticket_header = driver.find_element(By.CLASS_NAME, 'body-header').text
         except NoSuchElementException:
             # handle the case when there are no li_elements or there is no second li element
             print("Something went wrong on quadranet")
-            print("waiting for 15 minutes on " + str(datetime.datetime.now().strftime("%I:%M %p")) + " to " + str(
-                (datetime.datetime.now() + datetime.timedelta(minutes=30)).strftime("%I:%M %p")))
-            time.sleep(15 * 60)
+            print("waiting for 10 minutes on " + str(datetime.datetime.now().strftime("%I:%M %p")) + " to " + str(
+                (datetime.datetime.now() + datetime.timedelta(minutes=10)).strftime("%I:%M %p")))
+            time.sleep(10 * 60)
             print("starting over!")
             continue
         match = re.search(r'\d{2}/\d{2}/\d{4}', quadranet_ticket_header)  # we will get output as 12/19/2022
@@ -155,10 +220,12 @@ while True:
             searchClick = driver.find_element(By.NAME, 'searchterm')
         except NoSuchElementException:
             # handle the case when there are no li_elements or there is no second li element
-            print("Something went wrong on whmcs")
-            print("waiting for 15 minutes on " + str(datetime.datetime.now().strftime("%I:%M %p")) + " to " + str(
-                (datetime.datetime.now() + datetime.timedelta(minutes=30)).strftime("%I:%M %p")))
-            time.sleep(15 * 60)
+            print("Something went wrong on whmcs while trying to find manually entered IP")
+                # Todo
+                # Check to see if I am logged out of whmcs and log in again
+            print("waiting for 10 minutes on " + str(datetime.datetime.now().strftime("%I:%M %p")) + " to " + str(
+                (datetime.datetime.now() + datetime.timedelta(minutes=10)).strftime("%I:%M %p")))
+            time.sleep(10 * 60)
             print("starting over!")
             continue
         searchClick.send_keys(ip_address)
@@ -272,10 +339,12 @@ while True:
         try:
             select_element = driver.find_element(By.NAME, 'domainstatus')
         except NoSuchElementException:
-            print("Something went wrong on whmcs")
-            print("waiting for 15 minutes on " + str(datetime.datetime.now().strftime("%I:%M %p")) + " to " + str(
-                (datetime.datetime.now() + datetime.timedelta(minutes=15)).strftime("%I:%M %p")))
-            time.sleep(15 * 60)
+            print("Something went wrong on whmcs while getting domain status")
+            # Check if support pin is needed and then enable support pin access
+                # todo
+            print("waiting for 10 minutes on " + str(datetime.datetime.now().strftime("%I:%M %p")) + " to " + str(
+                (datetime.datetime.now() + datetime.timedelta(minutes=10)).strftime("%I:%M %p")))
+            time.sleep(10 * 60)
             print("starting over!")
             continue
         # Create a Select object to interact with the select element
@@ -328,6 +397,7 @@ while True:
             print("The quadranet ticket was created on the same day as the registration date.")
 
         if selected_status == "Suspended":
+            processed_ips[ip_address] = "suspended"
             # send the ticket reply as the user is suspended
             # go to the ticket again
             driver.get(url)
@@ -498,9 +568,9 @@ while True:
                 break
     else:
         print("No On Hold tickets found")
-        print("waiting for 15 minutes on " + str(datetime.datetime.now().strftime("%I:%M %p")) + " to " + str(
-            (datetime.datetime.now() + datetime.timedelta(minutes=15)).strftime("%I:%M %p")))
-        time.sleep(15 * 60)
+        print("waiting for 10 minutes on " + str(datetime.datetime.now().strftime("%I:%M %p")) + " to " + str(
+            (datetime.datetime.now() + datetime.timedelta(minutes=10)).strftime("%I:%M %p")))
+        time.sleep(10 * 60)
         print("starting over!")
         continue
     user_input = input("Press Enter to continue to next ticket, or any other key to exit: ")
