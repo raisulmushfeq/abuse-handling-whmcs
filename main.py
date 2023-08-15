@@ -185,7 +185,7 @@ while True:
             print("Error: Element with class 'no-margin' not found. Skipping this ticket.")
             # Move to the next ticket (iteration of the while loop)
             continue
-
+        
         # Prints the value we got from the header
         # print(headertext.text)
         # extract IP address from header if present
@@ -239,6 +239,14 @@ while True:
         raw_date = match.group(0)
         datetime_obj = datetime.datetime.strptime(raw_date, '%m/%d/%Y')
         quadranet_ticket_time = datetime_obj.strftime('%d/%m/%Y')  # we will get output as 19/12/2022
+
+        # Also get abuse content
+        abuse_body_element = driver.find_element(By.CLASS_NAME, 'body-content')
+        abuse_body = abuse_body_element.get_attribute('innerHTML')
+
+        # Remove HTML tags using regular expressions
+        cleaned_report = re.sub(r'<.*?>', '', abuse_body)
+
         # Now, search for this IP in WHMCS
         driver.get(whmcs_url + "/index.php")
         try:
@@ -463,6 +471,7 @@ while True:
                 print("Service IP: " + ip_address)
                 print("Reference " + ticket_id)
                 print("Service Hostname: " + hostname)
+                print("Abuse Report: " + cleaned_report)
                 print("#####################################")
                 print("You will need to copy in the following order 1. IP Address, 2. Reference 3. Abuse Report")
                 user_input = input("press enter again once you have copied the report, q, restart, 'old")
