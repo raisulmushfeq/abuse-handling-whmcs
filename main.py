@@ -9,6 +9,9 @@ from selenium.webdriver.support.ui import Select
 from selenium.webdriver.common.keys import Keys
 import re
 import datetime
+# For Web Requests
+import requests
+import json
 
 
 # from selenium.webdriver.support.ui import WebDriverWait
@@ -72,6 +75,7 @@ processed_ips = {}
 
 driver = webdriver.Chrome()
 
+
 # This function will send replies for suspended and already terminated users.
 def send_suspended_reply(driver, url, is_processed, ip_address):
     # Go to the ticket again
@@ -98,10 +102,10 @@ def send_suspended_reply(driver, url, is_processed, ip_address):
                                 "Regards")
         elif is_processed == "old":
             reply_box.send_keys("Hello!" +
-                            Keys.RETURN +
-                            "Thank you for the notification. I can see that this was a old ticket and the user had been terminated at the time of the incident. There is nothing much to do about it anymore. We are always willing to co-operate on any abuse reports." +
-                            Keys.RETURN +
-                            "Regards")
+                                Keys.RETURN +
+                                "Thank you for the notification. I can see that this was a old ticket and the user had been terminated at the time of the incident. There is nothing much to do about it anymore. We are always willing to co-operate on any abuse reports." +
+                                Keys.RETURN +
+                                "Regards")
 
         # Submit the reply
         service_list = driver.find_element(By.CLASS_NAME, 'modal-footer')
@@ -128,6 +132,33 @@ def extract_ip(text_line):
         return extracted_ip
     else:
         print("Could not find IP Address")
+
+
+# Function to open support ticket using WHMCS API run locally
+# It is assumed that the API will open ticket on Abuse Department
+def open_ticket(subject, body):
+    ticket_api = "http://127.0.0.1:5000/open_ticket"
+    payload = json.dumps({
+        "client_id": userid,
+        "subject": subject,
+        "message": body
+    })
+    headers = {
+        'Content-Type': 'application/json'
+    }
+    response = requests.request("POST", ticket_api, headers=headers, data=payload)
+    print(response.text)
+    # get the ticket ID
+    response_parts = response.text.split(';')
+    tid = None
+    for part in response_parts:
+        key, value = part.split('=')
+        if key == 'id':
+            whmcs_ticket_id = value
+            break
+    print(whmcs_url + "/supporttickets.php?action=view&id=" + whmcs_ticket_id)
+    # Todo
+    # Change the opened ticket status to Customer Reply Required, priority high
 
 
 quadranet.login_to_datacenter(quadranet.username, quadranet.username_element, quadranet.password,
@@ -185,7 +216,6 @@ while True:
             print("Error: Element with class 'no-margin' not found. Skipping this ticket.")
             # Move to the next ticket (iteration of the while loop)
             continue
-        
         # Prints the value we got from the header
         # print(headertext.text)
         # extract IP address from header if present
@@ -463,57 +493,41 @@ while True:
             driver.get(ticketsList.get_attribute('href'))
             # should we open the ticket?
             user_input = input(
-                "Press Enter to continue to next ticket, or any other key to exit, t to see ticket content, n to let them know user notified already, or 'suspend', 'old'")
+                "Press t to open ticket, n to let them know user notified already, or 'suspend', 'old', any other key to exit")
             if user_input == "t":
-                driver.get(url)
                 print("#####################################")
                 print("This information may help you..")
                 print("Service IP: " + ip_address)
                 print("Reference " + ticket_id)
                 print("Service Hostname: " + hostname)
-                print("Abuse Report: " + cleaned_report)
                 print("#####################################")
-                print("You will need to copy in the following order 1. IP Address, 2. Reference 3. Abuse Report")
-                user_input = input("press enter again once you have copied the report, q, restart, 'old")
-                if user_input == "q":
-                    break
-                elif user_input == "restart":
-                    continue
-                elif user_input == "old":
-                    # This will be executed if I see that the report is old and abusive user is terminated already
-                    processed_ips[ip_address] = "old"
-                    # notify quadranet about it
-                    driver.get(url)
-                    time.sleep(3)
-                    # click on the reply button
-                    reply = driver.find_element(By.ID, 'follow_up')
-                    reply.click()
-                    time.sleep(1)
-                    reply = driver.find_element(By.ID, 'reply_body')
-                    reply.send_keys("Hello!" +
-                                    Keys.RETURN +
-                                    "Thank you for the notification. I can see that this was a old ticket and the user had been terminated at the time of the incedent. There is nothing much to do about it anymore. We are always willing to co-operate on any abuse reports." +
-                                    Keys.RETURN +
-                                    "Regards")
-                    service_list = driver.find_element(By.CLASS_NAME, 'modal-footer')
-                    submit_button = service_list.find_element(By.CLASS_NAME, 'btn-primary')
-                    submit_button.click()
-                    print("Replied to Quadranet that the ticket is old. On " + url)
-                    continue
                 # Creating the customer abuse ticket from WHMCS
+
+                # Construct ticket subject
+                ticket_subject = "Report of abuse from server " + ip_address + \
+                                 " (ref: " + ticket_id + " ) - Immediate action required"
+                # Construct Ticket Body
+                ticket_body = ("There has been a report of abuse on your server (" + ip_address + ") \n" +
+                               "Per our policies, we require that all our clients respond to abuse notices as they "
+                               "come in. Failure to do so within a timely manner (within 24 hours) will result in a "
+                               "suspension of services until the server administrator has time to resolve the issue. \n"
+                               +
+                               "The initial complaint is attached to this ticket. If you don't see it under my "
+                               "signature, please log in to your billing interface and view the ticket there. \n" +
+                               "We will await your response indicating that you have complied with the order, "
+                               "dispute it, or require a reasonable extension of time to resolve the issue. \n"
+                               "Awaiting your timely response, \n"
+                               "Raisul \n"
+                               "IT Nut Hosting \n"
+                               "```\n"
+                               + cleaned_report + "\n"
+                               "```")
+
+                # Open the abuse ticket
+                open_ticket(ticket_subject, ticket_body)
+
                 print("getting back to the original abuse report to let them know that user is notified")
-                # Get back to ticket on whmcs
-                driver.get(whmcs_url + "/supporttickets.php?action=open&userid=" + userid)
-                # Implementing the while loop to prevent accidental enters
-                while True:
-                    proceed = input("type 'submit' after entering the abuse report to submit the report")
-                    if proceed == "submit":
-                        break
-                driver.find_element(By.ID, 'btnOpenTicket').click()
-                time.sleep(3)
-                ticket_status_select = driver.find_element(By.ID, 'ticketstatus')
-                ticket_status = Select(ticket_status_select)
-                ticket_status.select_by_value("Customer Reply Req.")
+
                 driver.get(url)
                 time.sleep(3)
                 # click on the reply button
@@ -610,10 +624,6 @@ while True:
         time.sleep(5 * 60)
         print("starting over!")
         continue
-    user_input = input("Press Enter to continue to next ticket, or any other key to exit: ")
-    if user_input == "":
-        continue  # continue to the next iteration of the loop
-        # if any other key was pressed, break out of the loop
-    break
+
 print("exiting...")
 driver.quit()
