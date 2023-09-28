@@ -13,6 +13,8 @@ import datetime
 import requests
 import json
 
+# Setup some requirements
+webnx_enabled = False
 
 # from selenium.webdriver.support.ui import WebDriverWait
 # from selenium.webdriver.support import expected_conditions as EC
@@ -129,7 +131,9 @@ def send_suspended_reply(driver, url, is_processed, ip_address):
 def extract_ip(text_line):
     extracted_ip = re.findall('\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}', text_line)
     if len(extracted_ip) > 0:
-        return extracted_ip
+        ip_address_string = ''.join(extracted_ip)
+        print("The abusive user IP is: " + ip_address_string)
+        return ip_address_string
     else:
         print("Could not find IP Address")
 
@@ -160,11 +164,64 @@ def open_ticket(subject, body):
     # Todo
     # Change the opened ticket status to Customer Reply Required, priority high
 
+# Function to search for VPS on WHMCS
+def search_vps_whmcs(ip_address):
+    driver.get(whmcs_url + "/index.php")
+    try:
+        searchClick = driver.find_element(By.NAME, 'searchterm')
+    except NoSuchElementException:
+        # handle the case when there are no li_elements or there is no second li element
+        print("Something went wrong on whmcs while trying to find manually entered IP")
+        # Todo
+        # Check to see if I am logged out of whmcs and log in again
+        print("waiting for 5 minutes on " + str(datetime.datetime.now().strftime("%I:%M %p")) + " to " + str(
+            (datetime.datetime.now() + datetime.timedelta(minutes=5)).strftime("%I:%M %p")))
+        time.sleep(5 * 60)
+        print("starting over!")
+    searchClick.send_keys(ip_address)
+    time.sleep(3)
+    service_list = driver.find_element(By.CSS_SELECTOR, 'ul[data-type="service"]')
+    # display what we are getting from the search result
+    # print(service_list.text)
+    # Find the anchor text for the service
+    li_elements = service_list.find_elements(By.TAG_NAME, 'li')
+    try:
+        second_a_element = li_elements[1].find_element(By.CSS_SELECTOR, 'a')
+        href_value = second_a_element.get_attribute('href')
+        # Prints the WHMCS link that we will go to
+        # print(href_value)
+        # print("Proceeding to service of " + ip_address)
+        # Now go to the client service
+        driver.get(href_value)
+        # Get the user ID
+        match = re.search(r"userid=(\d+)", href_value)
+        if match:
+            userid = match.group(1)
+            # print("User ID:", userid)
+        else:
+            print("User ID not found in URL")
+    except IndexError:
+        isterminated = input("can not find the user, is he terminated already? yes/no/suspended")
+        # Todo
+        # Shared hosting user hole notified korte hobe user ke, ticket theke shared hosting related data
+        # extract korte hobe. Customer ke notified kora hoise sei option add korte hobe.
+
+        if isterminated == "yes":
+            processed_ips[ip_address] = "yes"
+            # notify quadranet that user is already terminated
+            print("Already terminated")
+
+
+
+
+
+
 
 quadranet.login_to_datacenter(quadranet.username, quadranet.username_element, quadranet.password,
                               quadranet.password_element, quadranet.twoFactor, quadranet.url,
                               quadranet.login_path)
-webNX.login_to_datacenter(webNX.username, webNX.username_element, webNX.password, webNX.password_element,
+if webnx_enabled:
+    webNX.login_to_datacenter(webNX.username, webNX.username_element, webNX.password, webNX.password_element,
                           webNX.twoFactor, webNX.url, webNX.login_path, webNX.click_login)
 # Login to WHMCS
 driver.get(whmcs_url + "/login.php")
@@ -252,7 +309,7 @@ while True:
             # ip_address = input("Enter the IP address that you see on the report")
             # convert IP address as list type to string
             ip_address = ''.join(extracted_ip)
-        print("The abusive user IP is: " + ip_address)
+
         # Get the date of when the ticket opened
         try:
             # Get the date of when the ticket opened
@@ -278,6 +335,7 @@ while True:
         cleaned_report = re.sub(r'<.*?>', '', abuse_body)
 
         # Now, search for this IP in WHMCS
+
         driver.get(whmcs_url + "/index.php")
         try:
             searchClick = driver.find_element(By.NAME, 'searchterm')
@@ -617,13 +675,79 @@ while True:
                 continue
             elif user_input != "":
                 break
-    else:
-        print("No On Hold tickets found")
-        print("waiting for 5 minutes on " + str(datetime.datetime.now().strftime("%I:%M %p")) + " to " + str(
-            (datetime.datetime.now() + datetime.timedelta(minutes=5)).strftime("%I:%M %p")))
-        time.sleep(5 * 60)
-        print("starting over!")
-        continue
+    # else:  # if the first listed ticket on Quadranet is not "On Hold" meaning open ticket actually
+    #     print("No On Hold tickets found")
+    #     print("waiting for 5 minutes on " + str(datetime.datetime.now().strftime("%I:%M %p")) + " to " + str(
+    #         (datetime.datetime.now() + datetime.timedelta(minutes=5)).strftime("%I:%M %p")))
+    #     time.sleep(5 * 60)
+    #     print("starting over!")
+
+    print("No Quadranet Ticket found, moving on to WebNX")
+
+    if webnx_enabled:
+        # Process WebNX Abuse Ticket
+        # Go to support ticket page
+        driver.get(webNX.url + "/client/ticket_list.php?type_select=My")
+        html_element = WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((By.ID, 'list_container'))
+        )
+        # Get List Of tickets
+        # Get the inner HTML content from the WebElement
+        html_content = html_element.get_attribute("innerHTML")
+        # Create a BeautifulSoup object
+        soup = BeautifulSoup(html_content, 'html.parser')
+
+        # Find all ticket rows
+        ticket_rows = soup.select('tr.odd, tr.even')
+
+        # Define the filter criteria
+        desired_department = "Abuse"
+        desired_updated = "none"
+
+        # Initialize a variable to store the ticket ID
+        desired_ticket_id = None
+
+        # Loop through each ticket row
+        for row in ticket_rows:
+            # Extract ticket details
+            department = row.select_one('td:nth-child(8)').text
+            updated = row.select_one('td:nth-child(5)').text
+
+            # Check if the ticket matches the filter criteria
+            if department == desired_department and updated == desired_updated:
+                # Extract and store the ticket ID
+                ticket_id = row.select_one('td:nth-child(1) a').text
+                desired_ticket_id = ticket_id
+                break  # Stop iterating since we found the desired ticket
+
+        # Print the extracted ticket ID
+        if desired_ticket_id:  # If a ticket is found that is needed action
+            print("Desired Ticket ID:", desired_ticket_id)
+            # Open the ticket on browser
+            driver.get(webNX.url + "/client/ticket_view.php?ticket=" + desired_ticket_id)
+            # Get IP address from subject
+            html_element = WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((By.NAME, 'check_ticket'))
+            )
+            # Get List Of tickets
+            # Get the inner HTML content from the WebElement
+            html_content = html_element.get_attribute("innerHTML")
+            soup = BeautifulSoup(html_content, 'html.parser')
+            text = soup.find('h1').get_text(strip=True)
+            print(text)
+            # Get IP Address from ticket Subject
+            extracted_ip = extract_ip(text)
+            # Search on WHMCS with the IP
+            search_vps_whmcs(extracted_ip)
+        else:
+            print("No ticket found matching the criteria.")
+
+    # Wait and then start over
+    print("No On Hold tickets found")
+    print("waiting for 5 minutes on " + str(datetime.datetime.now().strftime("%I:%M %p")) + " to " + str(
+        (datetime.datetime.now() + datetime.timedelta(minutes=5)).strftime("%I:%M %p")))
+    time.sleep(5 * 60)
+    print("starting over!")
 
 print("exiting...")
 driver.quit()
