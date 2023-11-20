@@ -21,6 +21,7 @@ webnx_enabled = False
 
 # Trying out Class for OOP
 
+
 class Datacenter:
     def login_to_datacenter(self, user, user_elem, passwd, passwd_elem, twofactor, link, path=None, login_click=False):
         while True:
@@ -224,12 +225,21 @@ if webnx_enabled:
     webNX.login_to_datacenter(webNX.username, webNX.username_element, webNX.password, webNX.password_element,
                           webNX.twoFactor, webNX.url, webNX.login_path, webNX.click_login)
 # Login to WHMCS
-driver.get(whmcs_url + "/login.php")
-username = driver.find_element(By.NAME, 'username')
-password = driver.find_element(By.NAME, 'password')
-username.send_keys(whmcs_username)
-password.send_keys(whmcs_password)
-time.sleep(3)
+while True:
+    driver.get(whmcs_url + "/login.php")
+    try:
+        username = driver.find_element(By.NAME, 'username')
+        password = driver.find_element(By.NAME, 'password')
+        username.send_keys(whmcs_username)
+        password.send_keys(whmcs_password)
+        time.sleep(3)
+        break
+    except NoSuchElementException:
+        print("Something went wrong on whmcs while trying load login page")
+        print("waiting for 1 minutes on " + str(datetime.datetime.now().strftime("%I:%M %p")) + " to " + str(
+            (datetime.datetime.now() + datetime.timedelta(minutes=1)).strftime("%I:%M %p")))
+        time.sleep(1 * 60)
+        print("starting over!")
 # Now login to the WHMCS - Press the button
 # https://stackoverflow.com/questions/45527991/how-to-press-login-button-in-selenium-python-3
 elem = driver.find_element(By.XPATH, "//input[@type='submit' and @value='Login']")
@@ -569,6 +579,8 @@ while True:
                                "Per our policies, we require that all our clients respond to abuse notices as they "
                                "come in. Failure to do so within a timely manner (within 24 hours) will result in a "
                                "suspension of services until the server administrator has time to resolve the issue. \n"
+                               "If there is repeated abuse on the service, or if no action is taken within 72 hours, "
+                               "the service may be terminated automatically. \n"
                                +
                                "The initial complaint is attached to this ticket. If you don't see it under my "
                                "signature, please log in to your billing interface and view the ticket there. \n" +
