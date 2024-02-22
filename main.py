@@ -48,7 +48,7 @@ class Datacenter:
                 time.sleep(1)
                 driver.find_element(By.CLASS_NAME, 'btn-primary').click()
 
-
+ticket_api_url = "ip_or_hostname_of_whmcs.py_script"
 # needed information about quadranet
 quadranet = Datacenter()
 quadranet.username = 'your_username'  # Enter your quadranet username here
@@ -143,7 +143,7 @@ def extract_ip(text_line):
 # Function to open support ticket using WHMCS API run locally
 # It is assumed that the API will open ticket on Abuse Department
 def open_ticket(subject, body):
-    ticket_api = "http://127.0.0.1:5000/open_ticket"
+    ticket_api = "http://"+ ticket_api_url + ":5000/open_ticket"
     payload = json.dumps({
         "client_id": userid,
         "subject": subject,
@@ -436,7 +436,7 @@ while True:
                     submit_button = service_list.find_element(By.CLASS_NAME, 'btn-primary')
                     submit_button.click()
                     replies = replies + 1
-                    print("Replied " + "(" + str(
+                    print("[2] Replied " + "(" + str(
                         replies) + ")" + " to Quadranet that the user has been notified. On " + url)
                     continue
             else:

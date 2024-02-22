@@ -3,6 +3,7 @@ from flask import Flask, request, jsonify
 
 app = Flask(__name__)
 
+
 # WHMCS API URL
 whmcs_api_url = "your_WHMCS_URL/includes/api.php"
 # WHMCS API credentials
@@ -39,6 +40,6 @@ def open_ticket():
     # Process and return the response
     return jsonify(response.text)
 
-
-if __name__ == '__main__':
-    app.run(debug=True)
+if __name__ == "__main__":
+    from waitress import serve
+    serve(app, host="0.0.0.0", port=5000)
