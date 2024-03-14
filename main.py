@@ -1,7 +1,7 @@
 from selenium import webdriver
 import time
 from bs4 import BeautifulSoup
-from selenium.common import NoSuchElementException, TimeoutException
+from selenium.common import NoSuchElementException, TimeoutException, ElementNotInteractableException
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
@@ -42,8 +42,13 @@ class Datacenter:
                 if login == "restart":
                     continue  # starts the while loop again if restart is specified
                 else:
-                    driver.find_element(By.CLASS_NAME, 'btn-primary').click()
-                    break  # continues to script if restart is not specified
+                    try:
+                        driver.find_element(By.CLASS_NAME, 'btn-primary').click()
+                        # If the login button is not found, check if I am already logged in, and if logged in, continue to the script
+                    except ElementNotInteractableException:
+                        print("I tried to press the login button, but maybe you are already logged in, continuing")
+                    finally:
+                        break  # continues to script if restart is not specified
             else:  # if 2FA is not enabled or false, login to quadranet automatically with the login details
                 time.sleep(1)
                 driver.find_element(By.CLASS_NAME, 'btn-primary').click()
@@ -668,7 +673,7 @@ while True:
                 submit_button.click()
                 replies = replies + 1
                 print(
-                    "Replied " + "(" + str(replies) + ")" + " to Quadranet that the user has been notified. On " + url)
+                    "[3] Replied " + "(" + str(replies) + ")" + " to Quadranet that the user has been notified. On " + url)
             elif user_input == "n":
                 driver.get(url)
                 time.sleep(3)
@@ -702,7 +707,7 @@ while True:
                 driver.find_element(By.ID, "suspemail").click()
                 # finally press the suspend button
                 driver.find_element(By.ID, 'ModuleSuspend-Yes').click()
-                time.sleep(5)
+                time.sleep(10)
                 # notify quadranet about it
                 driver.get(url)
                 time.sleep(3)
@@ -749,15 +754,16 @@ while True:
     elif ticket_status.text == "On Hold" and ticket_department != "Abuse":
         print("On Hold ticket is from a different department. We need to work with next ticket")
         iteration = iteration + 1
-        # Wait 30 seconds
+        print("waiting for 30 Seconds on " + str(datetime.datetime.now().strftime("%I:%M %p")) + " to " + str(
+            (datetime.datetime.now() + datetime.timedelta(seconds=30)).strftime("%I:%M %p")))
+        # Wait 1 Minute
         time.sleep(30)
 
-    # else:  # if the first listed ticket on Quadranet is not "On Hold" meaning open ticket actually
-    #     print("No On Hold tickets found")
-    #     print("waiting for 5 minutes on " + str(datetime.datetime.now().strftime("%I:%M %p")) + " to " + str(
-    #         (datetime.datetime.now() + datetime.timedelta(minutes=5)).strftime("%I:%M %p")))
-    #     time.sleep(5 * 60)
-    #     print("starting over!")
+    else:  # if the first listed ticket on Quadranet is not "On Hold" meaning open ticket actually
+        print("No On Hold tickets found on Quadranet")
+        print("waiting for 5 minutes on " + str(datetime.datetime.now().strftime("%I:%M %p")) + " to " + str(
+            (datetime.datetime.now() + datetime.timedelta(minutes=5)).strftime("%I:%M %p")))
+        time.sleep(5 * 60)
 
     if webnx_enabled:
         print("No Quadranet Ticket found, moving on to WebNX")
@@ -823,7 +829,6 @@ while True:
                 (datetime.datetime.now() + datetime.timedelta(minutes=5)).strftime("%I:%M %p")))
             time.sleep(5 * 60)
     # Ticket Checking finished, no tickets has been found at this point. We will wait for 5 minutes and start over
-    time.sleep(5 * 60)
     print("[1] Starting over!")
 
 print("exiting...")
